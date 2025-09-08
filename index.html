@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>School Meet Manager — iPad (Offline)</title>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+<link rel="manifest" href="data:application/manifest+json,{&quot;name&quot;:&quot;School Meet Manager&quot;,&quot;short_name&quot;:&quot;Meet Manager&quot;,&quot;start_url&quot;:&quot;.&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;%23111111&quot;,&quot;theme_color&quot;:&quot;%23111111&quot;,&quot;icons&quot;:[{&quot;src&quot;:&quot;icon-192.png&quot;,&quot;sizes&quot;:&quot;192x192&quot;,&quot;type&quot;:&quot;image/png&quot;},{&quot;src&quot;:&quot;icon-512.png&quot;,&quot;sizes&quot;:&quot;512x512&quot;,&quot;type&quot;:&quot;image/png&quot;}]}"/>
+<style>
+:root { --pad: 14px; --bg: #f7f7fb; --card: #fff; --muted:#6b7280; --b:#e5e7eb; }
+*{ box-sizing: border-box; }
+body{ margin:0; font:16px system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; background:var(--bg); color:#111;}
+header{ padding:var(--pad); background:#111; color:#fff; }
+header h1{ margin:0 0 4px; font-size:20px; }
+header .sub{ color:#cbd5e1; font-size:13px; }
+nav.tabs{ display:flex; gap:6px; padding:6px var(--pad); background:#fff; border-bottom:1px solid var(--b);}
+nav.tabs button{ flex:1; padding:12px; border:1px solid var(--b); background:#fff; border-radius:8px; font-weight:600;}
+nav.tabs button.active{ background:#111; color:#fff; }
+section.tab{ display:none; padding:var(--pad); }
+section.tab.active{ display:block; }
+h2{ margin:0 0 10px; font-size:18px; }
+h3{ margin:16px 0 8px; font-size:16px; }
+.row{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:8px;}
+.grid{ display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:10px; align-items:end; }
+label{ display:flex; flex-direction:column; gap:6px; font-size:14px;}
+input, select, textarea, button{ font:inherit; }
+input, select, textarea{ padding:10px; border:1px solid var(--b); border-radius:8px; background:#fff; }
+textarea{ width:100%; }
+button{ padding:12px 14px; border:1px solid var(--b); border-radius:10px; background:#111; color:#fff; }
+button.secondary{ background:#fff; color:#111; }
+button:active{ transform:scale(0.99); }
+.hint{ color:var(--muted); font-size:13px; }
+.preview{ margin-top:10px; padding:10px; background:#fff; border:1px solid var(--b); border-radius:8px;}
+table.listing{ width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--b); border-radius:8px; overflow:hidden; }
+table.listing th, table.listing td{ padding:10px; border-bottom:1px solid var(--b); text-align:left; }
+table.listing th{ background:#f3f4f6; }
+footer{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:var(--pad); border-top:1px solid var(--b); background:#fff; position:sticky; bottom:0;}
+code{ background:#111; color:#fff; padding:2px 6px; border-radius:6px; font-size:13px;}
+</style>
+<!-- jsPDF CDN (cached by Safari after first load) -->
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+</head>
+<body>
+<header>
+  <h1>School Meet Manager</h1>
+  <div class="sub">iPad (offline) • 10-7-5-3-2-1 scoring • lane-free</div>
+</header>
+
+<nav class="tabs">
+  <button data-tab="data" class="active">Data</button>
+  <button data-tab="events">Events</button>
+  <button data-tab="results">Results</button>
+  <button data-tab="reports">Reports</button>
+  <button data-tab="settings">Settings</button>
+</nav>
+
+<section id="tab-data" class="tab active">
+  <h2>Participants</h2>
+  <p>Paste CSV: <code>First,Last,Gender,AgeGroup,Team</code></p>
+  <textarea id="csvAth" rows="6" placeholder="First,Last,Gender,AgeGroup,Team&#10;Alex,Smith,Girls,U13,Fraser"></textarea>
+  <div class="row">
+    <button id="btnImportAth">Import Athletes</button>
+    <button id="btnSeedDemo">Seed Demo Data</button>
+    <span class="hint">Demo: U13 Girls, 100m + Long Jump with results.</span>
+  </div>
+
+  <h3>Quick Add Event</h3>
+  <div class="grid">
+    <label>Name <input id="evName" placeholder="100m Final"/></label>
+    <label>Type
+      <select id="evType"><option value="track_time">Track (time)</option><option value="field_distance">Field (distance)</option></select>
+    </label>
+    <label>Gender
+      <select id="evGender"><option>Girls</option><option>Boys</option></select>
+    </label>
+    <label>Age Group <input id="evAge" placeholder="U13"/></label>
+    <button id="btnAddEvent">Add Event</button>
+  </div>
+
+  <h3>Auto-create Entries</h3>
+  <p>Put whole participant list into every event for that age group.</p>
+  <div class="grid">
+    <label>Age Group <input id="autoAge" placeholder="U13"/></label>
+    <label>Gender <select id="autoGender"><option>Girls</option><option>Boys</option></select></label>
+    <button id="btnAutoEntries">Add All Athletes to All Events</button>
+  </div>
+
+  <h3>Current Athletes</h3>
+  <table id="tblAthletes" class="listing"></table>
+</section>
+
+<section id="tab-events" class="tab">
+  <h2>Events</h2>
+  <div class="row">
+    <label>Filter Age <input id="fAgeEv" placeholder="U13"/></label>
+    <label>Gender <select id="fGenderEv"><option value="">All</option><option>Girls</option><option>Boys</option></select></label>
+    <button id="btnFilterEv">Filter</button>
+  </div>
+  <table id="tblEvents" class="listing"></table>
+
+  <h3>Advancement / Qualification</h3>
+  <div class="grid">
+    <label>Event <select id="advEvent"></select></label>
+    <label>Qualify mode
+      <select id="qualMode"><option value="disabled">Disabled</option><option value="top_n">Top N</option><option value="standard">Standard</option></select>
+    </label>
+    <label>Top N <input id="qualTopN" type="number" min="1"/></label>
+    <label>Standard (time or distance) <input id="qualStd" placeholder="12.50 or 4.50"/></label>
+    <label>Cap (optional) <input id="qualCap" type="number" min="1"/></label>
+    <label>Cap policy <select id="capPolicy"><option value="include_ties">Include ties</option><option value="drop_ties">Drop ties</option></select></label>
+    <label>Advance mode <select id="advMode"><option value="place">By place</option><option value="time">By time</option></select></label>
+    <label>Advance N <input id="advN" type="number" min="1"/></label>
+    <button id="btnSaveAdv">Save</button>
+  </div>
+</section>
+
+<section id="tab-results" class="tab">
+  <h2>Enter Results</h2>
+  <div class="row">
+    <label>Event <select id="resEvent"></select></label>
+    <button id="btnLoadEntries">Load Entries</button>
+  </div>
+  <div id="entriesWrap"></div>
+  <div class="row">
+    <button id="btnSaveResults">Save Results</button>
+    <button id="btnClearResults">Clear Results</button>
+  </div>
+</section>
+
+<section id="tab-reports" class="tab">
+  <h2>Reports & Exports</h2>
+  <div class="grid">
+    <label>Age Group <input id="repAge" placeholder="U13"/></label>
+    <label>Gender <select id="repGender"><option>Girls</option><option>Boys</option></select></label>
+  </div>
+
+  <h3>PDF (A4)</h3>
+  <div class="row">
+    <button id="pdfEvent">Per-Event Results PDF</button>
+    <button id="pdfEventSummary">Per-Event Summary PDF</button>
+    <button id="pdfFinalMarshal">Final Marshalling PDF (selected event)</button>
+  </div>
+  <div class="row">
+    <button id="pdfAgeGroup">Age-Group Meet Report</button>
+    <button id="pdfHouseTotals">House Totals PDF</button>
+    <button id="pdfAllSummaries">All Event Summaries (Age+Gender)</button>
+    <button id="pdfAllMarshalling">All Finals Marshalling (Age+Gender)</button>
+  </div>
+
+  <h3>CSV</h3>
+  <div class="grid">
+    <label>Event <select id="csvEvent"></select></label>
+    <label><input type="checkbox" id="csvExcludeZero"/> Breakdown: hide zero-point rows</label>
+  </div>
+  <div class="row">
+    <button id="csvPlacings">Placings CSV</button>
+    <button id="csvScorers">Point Scorers CSV</button>
+    <button id="csvStandings">Standings CSV (Age+Gender)</button>
+    <button id="csvHouse">House Totals CSV (Age+Gender)</button>
+    <button id="csvBreakdown">Age Champion Breakdown CSV</button>
+  </div>
+</section>
+
+<section id="tab-settings" class="tab">
+  <h2>Settings</h2>
+  <div class="grid">
+    <label>Default DRAFT watermark <input id="setDraft" type="checkbox"/></label>
+    <label>Hide “Scoring key” on PDFs <input id="setHideKey" type="checkbox"/></label>
+    <label>CSV header template <input id="setCsvTpl" placeholder="{STATE} generated {TIMESTAMP}"/></label>
+  </div>
+  <div class="preview">
+    <div>CSV header preview:</div>
+    <code id="csvHeaderPreview"></code>
+  </div>
+  <div class="row">
+    <button id="btnSaveSettings">Save Settings</button>
+    <button id="btnResetOutput">Reset Output Defaults</button>
+    <span class="hint">Use <code>{STATE}</code> and <code>{TIMESTAMP}</code>.</span>
+  </div>
+</section>
+
+<footer>
+  <button id="btnInstall" hidden>Install App</button>
+  <span>Offline ready • Data stored on this device</span>
+</footer>
+
+<script>
+/* --- minimal service worker inline registration for offline --- */
+if ('serviceWorker' in navigator) {
+  const swBlob = new Blob([`
+    const CACHE='meet-cache-v1';
+    const ASSETS=['.'];
+    self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)))});
+    self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))))});
+    self.addEventListener('fetch',e=>{ if(e.request.method!=='GET') return;
+      e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(resp=>{ if(new URL(e.request.url).origin===location.origin){const cl=resp.clone(); caches.open(CACHE).then(c=>c.put(e.request,cl));} return resp;})));
+    });
+  `], {type:'text/javascript'});
+  const swUrl = URL.createObjectURL(swBlob);
+  navigator.serviceWorker.register(swUrl);
+}
+</script>
+
+<script>
+/* =========================
+   App logic (IndexedDB + UI)
+   ========================= */
+const { jsPDF } = window.jspdf;
+
+// --- IDB helpers ---
+const DB_NAME='meet-db'; const DB_VER=1; let db;
+function idbOpen(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VER);
+  r.onupgradeneeded=()=>{const d=r.result; d.createObjectStore('athletes',{keyPath:'id',autoIncrement:true});
+    d.createObjectStore('events',{keyPath:'id',autoIncrement:true});
+    d.createObjectStore('entries',{keyPath:'id'});
+    d.createObjectStore('results',{keyPath:'entry_id'});
+    d.createObjectStore('settings',{keyPath:'id'});};
+  r.onerror=()=>rej(r.error); r.onsuccess=()=>res(r.result);});}
+function tx(s,m='readonly'){return db.transaction(s,m).objectStore(s);}
+function all(s){return new Promise((res,rej)=>{const r=tx(s).getAll(); r.onerror=()=>rej(r.error); r.onsuccess=()=>res(r.result);});}
+function put(s,v){return new Promise((res,rej)=>{const r=tx(s,'readwrite').put(v); r.onerror=()=>rej(r.error); r.onsuccess=()=>res(r.result);});}
+function del(s,k){return new Promise((res,rej)=>{const r=tx(s,'readwrite').delete(k); r.onerror=()=>rej(r.error); r.onsuccess=()=>res();});}
+
+// --- settings ---
+const defaultSettings={id:1, default_scoring:[10,7,5,3,2,1], tie_policy:'average_points', default_pdf_draft:true, hide_scoring_key:false, csv_header_template:'{STATE} generated {TIMESTAMP}'};
+async function getSettings(){const r=await new Promise(res=>{const q=tx('settings').get(1); q.onsuccess=()=>res(q.result||null);});
+  if(!r){await put('settings',defaultSettings); return defaultSettings;} return {...defaultSettings,...r};}
+
+// --- parsing ---
+function parseTimeToMs(s){const t=(s||'').trim(); if(!t) return null; if(t.includes(':')){const [m,rest]=t.split(':'); return Math.round(parseFloat(rest)*1000)+parseInt(m,10)*60000;} return Math.round(parseFloat(t)*1000);}
+function parseDistToMm(s){const t=(s||'').trim().toLowerCase().replace('m','').replace(/\s+/g,''); if(!t) return null;
+  if(t.includes('.')){const [m,cm]=t.split('.',2); const meters=parseInt(m||'0',10); const centi=parseInt((cm||'').padEnd(2,'0').slice(0,2),10); return meters*1000+centi*10;}
+  return Math.round(parseFloat(t)*1000);}
+
+// --- ranking/scoring ---
+function eventSortKey(type, perf){ if(perf==null) return [2,Infinity]; if(type==='track_time') return [0,perf]; if(type==='field_distance') return [0,-perf]; return [1,0];}
+function rankAndScore(ev, entries, results, settings){
+  const scoring=(ev.scoring_table&&ev.scoring_table.length?ev.scoring_table:settings.default_scoring).slice();
+  const rows=entries.map(en=>{const r=results.find(rr=>rr.entry_id===en.id)||null; return {en, perf:r?r.normalized_value:null, raw:r?r.raw_value:'', notes:r?r.notes||'':''};});
+  rows.sort((a,b)=>{const ka=eventSortKey(ev.type,a.perf), kb=eventSortKey(ev.type,b.perf); return ka[0]-kb[0]||ka[1]-kb[1];});
+  const out=[]; let i=0, place=1;
+  while(i<rows.length){
+    const block=[rows[i]]; let j=i+1;
+    while(j<rows.length && rows[j].perf===rows[i].perf && rows[i].perf!=null){block.push(rows[j]); j++;}
+    const tie=rows[i].perf==null?1:block.length; const occ=Array.from({length:tie},(_,k)=>place+k);
+    const pts=occ.map(p=>(p-1)<scoring.length?scoring[p-1]:0); const avg=tie>1?pts.reduce((a,b)=>a+b,0)/tie:(pts[0]||0);
+    for(const b of block){ const a = b.en; out.push({entry_id:a.id, place:b.perf==null?0:place, tie_span:tie, points:b.perf==null?0:avg, raw:b.raw||'', athlete_name:a.athlete_name, team:a.team||''});}
+    place+=tie; i=j;
+  }
+  return out;
+}
+
+// --- advancement helpers (finalists selection) ---
+function selectFinalists(ev, placings){ // returns array of entry_id for finalists (in marshalling order)
+  if(!ev.advance_n || ev.advance_n<=0) return [];
+  const includeTies = (ev.cap_policy||'include_ties')==='include_ties';
+  // order by place (if by place) or by performance rank (we already have order in placings)
+  const ranked = placings.filter(p=>p.place>0);
+  if(ev.advance_mode==='time'){ /* already ordered best -> worst by rankAndScore */ }
+  // cutoff logic
+  if(ranked.length<=ev.advance_n) return ranked.map(p=>p.entry_id);
+  const cut = ev.advance_n;
+  const last = ranked[cut-1];
+  if(!includeTies) return ranked.slice(0, cut).map(p=>p.entry_id);
+  // include all tied with the last one (same place if by place; or same perf → same place already)
+  const placeCut = last.place;
+  return ranked.filter(p=>p.place===placeCut || p.place<placeCut).map(p=>p.entry_id);
+}
+
+// --- utils ---
+const $ = s=>document.querySelector(s);
+function nowStamp(){const d=new Date(); const pad=n=>n<10?'0'+n:n; return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;}
+function drawWatermark(doc, text){doc.saveGraphicsState(); doc.setFont('helvetica','bold'); doc.setFontSize(72); doc.setTextColor(230,230,230); doc.text(text,105,150,{angle:45,align:'center'}); doc.restoreGraphicsState();}
+function footer(doc,title,page){doc.setFontSize(8); doc.setTextColor(0,0,0); doc.text(`${title} · Page ${page} · Printed ${nowStamp()}`,200-10,290,{align:'right'});}
+function table(doc,x,y,heads,rows){const lineH=7, cellW=(190)/heads.length; doc.setFontSize(10); doc.setFillColor(243,244,246);
+  heads.forEach((h,i)=>{doc.rect(x+i*cellW,y,cellW,lineH,'F'); doc.text(String(h),x+2+i*cellW,y+5);});
+  let yy=y+lineH; rows.forEach(r=>{r.forEach((c,i)=>{doc.rect(x+i*cellW,yy,cellW,lineH); doc.text(String(c??''),x+2+i*cellW,yy+5);}); yy+=lineH;}); return yy;}
+
+// --- data UI ---
+async function refreshAthletes(){const A=await all('athletes'); $('#tblAthletes').innerHTML='<tr><th>Name</th><th>Gender</th><th>Age</th><th>Team</th></tr>'+A.map(a=>`<tr><td>${a.first} ${a.last}</td><td>${a.gender}</td><td>${a.age_group}</td><td>${a.team||''}</td></tr>`).join('');}
+async function refreshEventsFilters(){
+  const E=await all('events'); const age=$('#fAgeEv').value.trim(); const g=$('#fGenderEv').value.trim();
+  const filtered=E.filter(e=>(!age||e.age_group===age)&&(!g||e.gender===g));
+  $('#tblEvents').innerHTML='<tr><th>Name</th><th>Type</th><th>Age</th><th>Gender</th></tr>'+filtered.map(e=>`<tr><td>${e.name}</td><td>${e.type}</td><td>${e.age_group}</td><td>${e.gender}</td></tr>`).join('');
+  $('#resEvent').innerHTML=filtered.map(e=>`<option value="${e.id}">${e.name} (${e.age_group} ${e.gender})</option>`).join('');
+  $('#advEvent').innerHTML=E.map(e=>`<option value="${e.id}">${e.name} (${e.age_group} ${e.gender})</option>`).join('');
+  $('#csvEvent').innerHTML=E.map(e=>`<option value="${e.id}">${e.name} (${e.age_group} ${e.gender})</option>`).join('');
+}
+
+// --- entries/results form ---
+async function loadEntriesForEvent(evId){
+  const [E, EN, A, R] = await Promise.all([all('events'), all('entries'), all('athletes'), all('results')]);
+  const ev=E.find(e=>e.id==evId);
+  const evEntries=EN.filter(en=>en.event_id==evId).map(en=>{
+    const a=A.find(x=>x.id===en.athlete_id); const r=R.find(rr=>rr.entry_id===en.id);
+    return { id:en.id, name:`${a.first} ${a.last}`, team:a.team||'', raw:r?r.raw_value:'', wind:r?r.wind||'' };
+  });
+  const wrap=$('#entriesWrap');
+  if(!evEntries.length){ wrap.innerHTML='<p>No entries for this event. Use “Auto-create Entries”.</p>'; return; }
+  wrap.innerHTML=`<table class="listing"><tr><th>Athlete</th><th>Team</th><th>Result</th><th>Wind</th></tr>${
+    evEntries.map(e=>`<tr><td>${e.name}</td><td>${e.team}</td>
+      <td><input data-entry="${e.id}" class="resInput" placeholder="${ev.type==='track_time'?'12.34 or 1:02.34':'4.55'}" value="${e.raw||''}"></td>
+      <td><input data-wind="${e.id}" class="windInput" placeholder="+1.2" value="${e.wind||''}"></td>
+    </tr>`).join('')
+  }</table>`;
+}
+
+// --- core build helpers ---
+async function buildPlacings(eventId){
+  const [S, E, EN, A, R] = await Promise.all([getSettings(), all('events'), all('entries'), all('athletes'), all('results')]);
+  const ev=E.find(e=>e.id==eventId);
+  const ens=EN.filter(en=>en.event_id==eventId).map(en=>{const a=A.find(x=>x.id===en.athlete_id); return {...en, athlete_name:`${a.first} ${a.last}`, team:a.team||''};});
+  return rankAndScore(ev, ens, R, S);
+}
+function scoringKeyMaybe(S){return S.hide_scoring_key?'':'Scoring: 10-7-5-3-2-1 (ties average points).';}
+function csvHeader(S){const state=S.default_pdf_draft?'DRAFT':'FINAL'; const line=(S.csv_header_template||'{STATE} generated {TIMESTAMP}')
+ .replaceAll('{STATE}',state).replaceAll('{TIMESTAMP}',nowStamp()).replace(/\s+/g,' ').trim(); return `# ${line}`;}
+function downloadText(name,text){const blob=new Blob([text],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); URL.revokeObjectURL(a.href);}
+
+// --- PDFs: event, summaries, house, meet, marshalling ---
+async function pdfPerEvent(full=false){
+  const evId=parseInt($('#csvEvent').value,10);
+  const [S, E, EN, A] = await Promise.all([getSettings(), all('events'), all('entries'), all('athletes')]);
+  const ev=E.find(e=>e.id==evId); const doc=new jsPDF({unit:'mm',format:'a4'}); const title=`${ev.age_group} ${ev.gender} — ${ev.name}`; if(S.default_pdf_draft) drawWatermark(doc,'DRAFT');
+  doc.setFontSize(18); doc.text(title,10,14); doc.setFontSize(10); let y=22;
+  if(full){const evEntries=EN.filter(en=>en.event_id==evId).map(en=>{const a=A.find(x=>x.id===en.athlete_id); return [en.heat||'',`${a.first} ${a.last}`,a.team||'','',''];}); y=table(doc,10,y,['Heat','Athlete','Team','Result','Notes'],evEntries); y+=4;}
+  const placings=await buildPlacings(evId);
+  const rows=placings.filter(p=>p.place>0).map(p=>[(p.tie_span>1?'T':'')+p.place,'',p.athlete_name,p.team,p.raw,p.points.toFixed(2)]);
+  y=table(doc,10,y,['Place','★','Athlete','Team','Result','Points'],rows); y+=4; const key=scoringKeyMaybe(S); if(key){doc.text(key,10,y); y+=6;}
+  const scorers=placings.filter(p=>p.place>0&&p.points>0).map(p=>[p.athlete_name,p.team,(p.tie_span>1?'T':'')+p.place,p.points.toFixed(2),p.raw]);
+  if(scorers.length){doc.setFontSize(12); doc.text('Point Scorers',10,y); y+=4; doc.setFontSize(10); y=table(doc,10,y,['Athlete','Team','Place','Points','Raw Result'],scorers);}
+  footer(doc,title,1); doc.save(`${ev.age_group}_${ev.gender}_${ev.name.replaceAll(' ','_')}${full?'':'_summary'}.pdf`);
+}
+async function pdfAgeGroupReport(){
+  const ag=$('#repAge').value.trim(), g=$('#repGender').value.trim(); const [S,E,EN,A]=await Promise.all([getSettings(),all('events'),all('entries'),all('athletes')]);
+  const evs=E.filter(e=>e.age_group===ag&&e.gender===g).sort((a,b)=>a.name.localeCompare(b.name)); if(!evs.length) return alert('No events.');
+  const doc=new jsPDF({unit:'mm',format:'a4'}); if(S.default_pdf_draft) drawWatermark(doc,'DRAFT'); let page=1;
+  doc.setFontSize(20); doc.text(`${ag} ${g} — Meet Report`,10,16); doc.setFontSize(10); doc.text(nowStamp(),10,22); footer(doc,`${ag} ${g} — Meet Report`,page);
+  for(let i=0;i<evs.length;i++){ if(i>0){doc.addPage(); page++; if(S.default_pdf_draft) drawWatermark(doc,'DRAFT');}
+    const e=evs[i]; let y=14; doc.setFontSize(16); doc.text(`${e.age_group} ${e.gender} — ${e.name}`,10,y); y+=6; doc.setFontSize(10);
+    const evEntries=EN.filter(en=>en.event_id===e.id).map(en=>{const a=A.find(x=>x.id===en.athlete_id); return [en.heat||'',`${a.first} ${a.last}`,a.team||'','',''];});
+    y=table(doc,10,y,['Heat','Athlete','Team','Result','Notes'],evEntries); y+=4;
+    const placings=await buildPlacings(e.id);
+    const rows=placings.filter(p=>p.place>0).map(p=>[(p.tie_span>1?'T':'')+p.place,'',p.athlete_name,p.team,p.raw,p.points.toFixed(2)]);
+    y=table(doc,10,y,['Place','★','Athlete','Team','Result','Points'],rows); y+=4; const key=scoringKeyMaybe(S); if(key){doc.text(key,10,y); y+=6;}
+    const scorers=placings.filter(p=>p.place>0&&p.points>0).map(p=>[p.athlete_name,p.team,(p.tie_span>1?'T':'')+p.place,p.points.toFixed(2),p.raw]);
+    if(scorers.length){doc.setFontSize(12); doc.text('Point Scorers',10,y); y+=4; doc.setFontSize(10); y=table(doc,10,y,['Athlete','Team','Place','Points','Raw Result'],scorers);}
+    footer(doc,`${ag} ${g} — Meet Report`,page);
+  }
+  doc.save(`${ag}_${g}_meet_report.pdf`);
+}
+async function pdfHouse(){const ag=$('#repAge').value.trim(), g=$('#repGender').value.trim(); const S=await getSettings(); const doc=new jsPDF({unit:'mm',format:'a4'}); if(S.default_pdf_draft) drawWatermark(doc,'DRAFT');
+  doc.setFontSize(18); doc.text(`${ag} ${g} — House Totals`,10,14); const rows=await computeHouseTotals(ag,g); table(doc,10,22,['Rank','Team/House','Total Points'],rows.map((r,i)=>[i+1,r.team,r.points.toFixed(2)]));
+  footer(doc,`${ag} ${g} — House Totals`,1); doc.save(`${ag}_${g}_house_totals.pdf`);}
+async function pdfAllSummaries(){const ag=$('#repAge').value.trim(), g=$('#repGender').value.trim(); const [S,E]=await Promise.all([getSettings(),all('events')]);
+  const evs=E.filter(e=>e.age_group===ag&&e.gender===g).sort((a,b)=>a.name.localeCompare(b.name)); if(!evs.length) return alert('No events.'); const doc=new jsPDF({unit:'mm',format:'a4'}); if(S.default_pdf_draft) drawWatermark(doc,'DRAFT'); let page=1;
+  doc.setFontSize(18); doc.text(`${ag} ${g} — Event Summaries`,10,14); footer(doc,`${ag} ${g} — Event Summaries`,page);
+  for(let i=0;i<evs.length;i++){ if(i>0){doc.addPage(); page++; if(S.default_pdf_draft) drawWatermark(doc,'DRAFT');}
+    const e=evs[i]; let y=14; doc.setFontSize(14); doc.text(e.name,10,y); y+=4; doc.setFontSize(10);
+    const placings=await buildPlacings(e.id);
+    const rows=placings.filter(p=>p.place>0).map(p=>[(p.tie_span>1?'T':'')+p.place,'',p.athlete_name,p.team,p.raw,p.points.toFixed(2)]);
+    y=table(doc,10,y,['Place','★','Athlete','Team','Result','Points'],rows); y+=4; const key=scoringKeyMaybe(S); if(key){doc.text(key,10,y); y+=6;}
+    const scorers=placings.filter(p=>p.place>0&&p.points>0).map(p=>[p.athlete_name,p.team,(p.tie_span>1?'T':'')+p.place,p.points.toFixed(2),p.raw]);
+    if(scorers.length){doc.setFontSize(12); doc.text('Point Scorers',10,y); y+=4; doc.setFontSize(10); y=table(doc,10,y,['Athlete','Team','Place','Points','Raw Result'],scorers);}
+    footer(doc,`${ag} ${g} — Event Summaries`,page);
+  } doc.save(`${ag}_${g}_event_summaries.pdf`);}
+
+// --- Final Marshalling PDFs ---
+async function pdfMarshallingForEvent(evId){
+  const [S,E,EN,A,R]=await Promise.all([getSettings(),all('events'),all('entries'),all('athletes'),all('results')]);
+  const ev=E.find(e=>e.id==evId); const doc=new jsPDF({unit:'mm',format:'a4'}); const title=`${ev.age_group} ${ev.gender} — ${ev.name} (Final Marshalling)`; if(S.default_pdf_draft) drawWatermark(doc,'DRAFT');
+  doc.setFontSize(18); doc.text(title,10,14);
+  const ens=EN.filter(en=>en.event_id==evId).map(en=>{const a=A.find(x=>x.id===en.athlete_id); return {...en, athlete_name:`${a.first} ${a.last}`, team:a.team||''};});
+  const placings=rankAndScore(ev, ens, R, S);
+  const finalistsIds=selectFinalists(ev, placings);
+  if(!finalistsIds.length) { doc.setFontSize(12); doc.text('No finalists configured. Set Advance N in Events → Advancement.',10,26); footer(doc,title,1); return doc.save(`${ev.age_group}_${ev.gender}_${ev.name.replaceAll(' ','_')}_marshalling.pdf`); }
+  const finalists = ens.filter(en=>finalistsIds.includes(en.id)).sort((a,b)=> a.athlete_name.localeCompare(b.athlete_name));
+  const rows=finalists.map(f=>[f.athlete_name, f.team, '']);
+  table(doc,10,22,['Athlete','Team','Notes'],rows);
+  footer(doc,title,1);
+  doc.save(`${ev.age_group}_${ev.gender}_${ev.name.replaceAll(' ','_')}_marshalling.pdf`);
+}
+async function pdfAllMarshalling(){
+  const ag=$('#repAge').value.trim(), g=$('#repGender').value.trim();
+  const [S,E,EN,A,R]=await Promise.all([getSettings(),all('events'),all('entries'),all('athletes'),all('results')]);
+  const evs=E.filter(e=>e.age_group===ag&&e.gender===g&&e.advance_n>0).sort((a,b)=>a.name.localeCompare(b.name));
+  if(!evs.length) return alert('No events with finalists configured (Advance N).');
+  const doc=new jsPDF({unit:'mm',format:'a4'}); if(S.default_pdf_draft) drawWatermark(doc,'DRAFT'); let page=1;
+  for(let i=0;i<evs.length;i++){
+    if(i>0){doc.addPage(); page++; if(S.default_pdf_draft) drawWatermark(doc,'DRAFT');}
+    const ev=evs[i]; const title=`${ag} ${g} — ${ev.name} (Final Marshalling)`; doc.setFontSize(16); doc.text(title,10,14); doc.setFontSize(10);
+    const ens=EN.filter(en=>en.event_id===ev.id).map(en=>{const a=A.find(x=>x.id===en.athlete_id); return {...en, athlete_name:`${a.first} ${a.last}`, team:a.team||''};});
+    const placings=rankAndScore(ev, ens, R, S); const ids=selectFinalists(ev, placings);
+    const finalists=ens.filter(en=>ids.includes(en.id)).sort((a,b)=> a.athlete_name.localeCompare(b.athlete_name));
+    const rows=finalists.map(f=>[f.athlete_name, f.team, '']);
+    table(doc,10,20,['Athlete','Team','Notes'],rows);
+    footer(doc,`${ag} ${g} — Finals Marshalling`,page);
+  }
+  doc.save(`${ag}_${g}_finals_marshalling.pdf`);
+}
+
+// --- standings & house totals + CSVs ---
+async function computeStandings(ag,g){const [E,EN,R,A,S]=await Promise.all([all('events'),all('entries'),all('results'),all('athletes'),getSettings()]);
+  const evs=E.filter(e=>e.age_group===ag&&e.gender===g); const totals=new Map();
+  for(const e of evs){const ens=EN.filter(en=>en.event_id===e.id).map(en=>{const a=A.find(x=>x.id===en.athlete_id); return {...en, athlete_name:`${a.first} ${a.last}`, team:a.team||''};});
+    const placings=rankAndScore(e,ens,R,S); placings.filter(p=>p.place>0).forEach(p=>{const aid=ens.find(x=>x.id===p.entry_id).athlete_id; totals.set(aid,(totals.get(aid)||0)+p.points);});}
+  const rows=Array.from(totals.entries()).map(([aid,pts])=>{const a=A.find(x=>x.id===aid); return {name:`${a.first} ${a.last}`, team:a.team||'', points:pts};})
+    .sort((x,y)=> y.points-x.points || x.name.localeCompare(y.name)); return rows;}
+async function computeHouseTotals(ag,g){const s=await computeStandings(ag,g); const sums=new Map(); s.forEach(r=>sums.set(r.team,(sums.get(r.team)||0)+r.points));
+  return Array.from(sums.entries()).map(([team,pts])=>({team:team||'—', points:pts})).sort((a,b)=> b.points-a.points || a.team.localeCompare(b.team));}
+async function csvPlacings(evId){const [E,S]=await Promise.all([all('events'),getSettings()]); const e=E.find(x=>x.id==evId); const p=await buildPlacings(evId);
+  const lines=[csvHeader(S),'Event,Age Group,Gender,Place,Qualified,Athlete,Team,Raw Result,Points'];
+  p.filter(r=>r.place>0).forEach(r=>lines.push([e.name,e.age_group,e.gender,(r.tie_span>1?'T':'')+r.place,'',r.athlete_name,r.team,r.raw,r.points.toFixed(2)].join(',')));
+  downloadText(`${e.age_group}_${e.gender}_${e.name.replaceAll(' ','_')}_placings.csv`,lines.join('\n'));}
+async function csvScorers(evId){const [E,S]=await Promise.all([all('events'),getSettings()]); const e=E.find(x=>x.id==evId); const p=await buildPlacings(evId);
+  const lines=[csvHeader(S),'Event,Age Group,Gender,Athlete,Team,Place,Points,Raw Result'];
+  p.filter(r=>r.place>0&&r.points>0).forEach(r=>lines.push([e.name,e.age_group,e.gender,r.athlete_name,r.team,(r.tie_span>1?'T':'')+r.place,r.points.toFixed(2),r.raw].join(',')));
+  downloadText(`${e.age_group}_${e.gender}_${e.name.replaceAll(' ','_')}_scorers.csv`,lines.join('\n'));}
+async function csvStandings(ag,g){const S=await getSettings(); const rows=await computeStandings(ag,g);
+  const lines=[csvHeader(S),'Rank,Athlete,Team,Total Points']; rows.forEach((r,i)=>lines.push([i+1,r.name,r.team,r.points.toFixed(2)].join(',')));
+  downloadText(`${ag}_${g}_standings.csv`,lines.join('\n'));}
+async function csvHouseTotals(ag,g){const S=await getSettings(); const rows=await computeHouseTotals(ag,g);
+  const lines=[csvHeader(S),'Rank,Team/House,Total Points']; rows.forEach((r,i)=>lines.push([i+1,r.team,r.points.toFixed(2)].join(',')));
+  downloadText(`${ag}_${g}_house_totals.csv`,lines.join('\n'));}
+async function csvBreakdown(ag,g,exZero){const S=await getSettings(); const [E,EN,R,A]=await Promise.all([all('events'),all('entries'),all('results'),all('athletes')]);
+  const evs=E.filter(e=>e.age_group===ag&&e.gender===g); const totals=new Map(); const rows=[];
+  for(const e of evs){const ens=EN.filter(en=>en.event_id===e.id).map(en=>{const a=A.find(x=>x.id===en.athlete_id); return {...en, athlete_name:`${a.first} ${a.last}`, team:a.team||''};});
+    const p=rankAndScore(e,ens,R,await getSettings()); p.filter(x=>x.place>0).forEach(x=>{const aid=ens.find(q=>q.id===x.entry_id).athlete_id; totals.set(aid,(totals.get(aid)||0)+x.points);
+      if(!exZero||x.points>0){rows.push({aid, athlete:ens.find(q=>q.id===x.entry_id).athlete_name, team:ens.find(q=>q.id===x.entry_id).team, event:e.name, place:x.place, points:x.points, raw:x.raw});}});}
+  const ranked=Array.from(totals.entries()).sort((a,b)=>b[1]-a[1]); const rankMap=new Map(ranked.map(([aid,_],i)=>[aid,i+1]));
+  const out=[csvHeader(S),'Rank,Athlete,Team,Event,Place,Points,Raw Result'];
+  rows.sort((a,b)=>(rankMap.get(a.aid)-rankMap.get(b.aid))||a.event.localeCompare(b.event))
+    .forEach(r=>out.push([rankMap.get(r.aid),r.athlete,r.team,r.event,r.place,r.points.toFixed(2),r.raw].join(',')));
+  downloadText(`${ag}_${g}_age_champion_breakdown.csv`,out.join('\n'));}
+
+// --- import/seed/events/helpers ---
+async function importAthletesCSV(text){const lines=(text||'').trim().split(/\r?\n/).filter(Boolean);
+  for(const line of lines){const [first,last,gender,age,team]=(line.split(',').map(s=>s?.trim())); if(!first||!last||!gender||!age) continue; await put('athletes',{first,last,gender,age_group:age,team:team||''});}
+  await refreshAthletes();}
+async function addEvent(name,type,gender,age){await put('events',{name,type,gender,age_group:age, scoring_table:null, qualify_mode:'disabled',qualify_top_n:null,qualify_standard_raw:null,qualify_cap:null,cap_policy:'include_ties', round_type:'final',advance_mode:'place',advance_n:null}); await refreshEventsFilters();}
+async function autoEntries(age,gender){const [A,E]=await Promise.all([all('athletes'),all('events')]); const AA=A.filter(a=>a.age_group===age&&a.gender===gender), EE=E.filter(e=>e.age_group===age&&e.gender===gender);
+  for(const e of EE){for(const a of AA){await put('entries',{id:`${e.id}-${a.id}`, event_id:e.id, athlete_id:a.id, heat:1, athlete_name:`${a.first} ${a.last}`, team:a.team||''});}}}
+async function seedDemo(){const csv=`Alex,Smith,Girls,U13,Fraser
+Jamie,Lee,Girls,U13,Bradman
+Riley,Chen,Girls,U13,Cuthbert
+Taylor,Nguyen,Girls,U13,Fraser
+Jordan,Khan,Girls,U13,Bradman
+Casey,Wong,Girls,U13,Cuthbert`; await importAthletesCSV(csv);
+  await addEvent('100m Final','track_time','Girls','U13'); await addEvent('Long Jump Final','field_distance','Girls','U13'); await autoEntries('U13','Girls');
+  const [E,EN]=await Promise.all([all('events'),all('entries')]); const ev100=E.find(e=>e.name==='100m Final'&&e.age_group==='U13'&&e.gender==='Girls'); const evLJ=E.find(e=>e.name==='Long Jump Final'&&e.age_group==='U13'&&e.gender==='Girls');
+  // configure finalists: top 4 by place
+  ev100.advance_mode='place'; ev100.advance_n=4; await put('events',ev100);
+  evLJ.advance_mode='place'; evLJ.advance_n=4; await put('events',evLJ);
+  const names=(n)=>EN.find(en=>en.event_id===ev100.id&&en.athlete_name.startsWith(n)); const e2=(n)=>EN.find(en=>en.event_id===evLJ.id&&en.athlete_name.startsWith(n));
+  const tmap={'Alex':'12.00','Jamie':'12.00','Riley':'12.40','Taylor':'12.60','Jordan':'12.80','Casey':'13.00'};
+  for(const [nm,raw] of Object.entries(tmap)){const en=names(nm); await put('results',{entry_id:en.id,raw_value:raw,normalized_value:parseTimeToMs(raw),wind:'',notes:''});}
+  const lmap={'Riley':'4.55','Alex':'4.48','Jamie':'4.42','Taylor':'4.30','Jordan':'4.15','Casey':'3.95'};
+  for(const [nm,raw] of Object.entries(lmap)){const en=e2(nm); await put('results',{entry_id:en.id,raw_value:raw,normalized_value:parseDistToMm(raw),wind:'',notes:''});}
+  await refreshAthletes(); await refreshEventsFilters(); alert('Demo seeded: U13 Girls • 6 athletes • finalists preconfigured.');}
+
+// --- install prompt ---
+let deferredPrompt=null; window.addEventListener('beforeinstallprompt',e=>{e.preventDefault(); deferredPrompt=e; $('#btnInstall').hidden=false;});
+$('#btnInstall').addEventListener('click', async ()=>{if(!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; $('#btnInstall').hidden=true; deferredPrompt=null;});
+
+// --- nav/tab handlers ---
+document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('nav button').forEach(bb=>bb.classList.toggle('active',bb===b)); document.querySelectorAll('section.tab').forEach(sec=>sec.classList.toggle('active',sec.id===`tab-${b.dataset.tab}`));}));
+
+// --- buttons ---
+$('#btnImportAth').addEventListener('click',async()=>{await importAthletesCSV($('#csvAth').value);});
+$('#btnSeedDemo').addEventListener('click',seedDemo);
+$('#btnAddEvent').addEventListener('click',async()=>{await addEvent($('#evName').value.trim(),$('#evType').value,$('#evGender').value,$('#evAge').value.trim()); alert('Event added.');});
+$('#btnAutoEntries').addEventListener('click',async()=>{await autoEntries($('#autoAge').value.trim(),$('#autoGender').value.trim()); alert('Entries created.');});
+$('#btnFilterEv').addEventListener('click',refreshEventsFilters);
+$('#btnLoadEntries').addEventListener('click',async()=>{const id=parseInt($('#resEvent').value,10); await loadEntriesForEvent(id);});
+$('#btnSaveResults').addEventListener('click',async()=>{const evId=parseInt($('#resEvent').value,10);
+  const [E]=await Promise.all([all('events')]); const ev=E.find(e=>e.id==evId);
+  const resInputs=[...document.querySelectorAll('.resInput')]; const windInputs=[...document.querySelectorAll('.windInput')]; const windMap=new Map(windInputs.map(i=>[i.dataset.wind,i.value.trim()]));
+  for(const inp of resInputs){const entryId=inp.dataset.entry; const raw=inp.value.trim(); let norm=null; if(raw) norm=ev.type==='track_time'?parseTimeToMs(raw):parseDistToMm(raw); if(norm!=null) await put('results',{entry_id:entryId,raw_value:raw,normalized_value:norm,wind:windMap.get(entryId)||'',notes:''}); else await del('results',entryId);}
+  alert('Results saved.');});
+$('#btnClearResults').addEventListener('click',async()=>{const evId=parseInt($('#resEvent').value,10); const EN=await all('entries'); const evEntries=EN.filter(en=>en.event_id==evId); for(const en of evEntries) await del('results',en.id); await loadEntriesForEvent(evId);});
+
+// PDFs
+$('#pdfEvent').addEventListener('click',()=>pdfPerEvent(true));
+$('#pdfEventSummary').addEventListener('click',()=>pdfPerEvent(false));
+$('#pdfAgeGroup').addEventListener('click',pdfAgeGroupReport);
+$('#pdfHouseTotals').addEventListener('click',pdfHouse);
+$('#pdfAllSummaries').addEventListener('click',pdfAllSummaries);
+$('#pdfFinalMarshal').addEventListener('click',async()=>{const evId=parseInt($('#csvEvent').value,10); await pdfMarshallingForEvent(evId);});
+$('#pdfAllMarshalling').addEventListener('click',pdfAllMarshalling);
+
+// CSVs
+$('#csvPlacings').addEventListener('click',async()=>{const id=parseInt($('#csvEvent').value,10); await csvPlacings(id);});
+$('#csvScorers').addEventListener('click',async()=>{const id=parseInt($('#csvEvent').value,10); await csvScorers(id);});
+$('#csvStandings').addEventListener('click',async()=>{await csvStandings($('#repAge').value.trim(),$('#repGender').value.trim());});
+$('#csvHouse').addEventListener('click',async()=>{await csvHouseTotals($('#repAge').value.trim(),$('#repGender').value.trim());});
+$('#csvBreakdown').addEventListener('click',async()=>{await csvBreakdown($('#repAge').value.trim(),$('#repGender').value.trim(),$('#csvExcludeZero').checked);});
+
+// Settings
+function updateCsvPreviewUI(){getSettings().then(s=>{const state=s.default_pdf_draft?'DRAFT':'FINAL'; const tpl=$('#setCsvTpl').value||'{STATE} generated {TIMESTAMP}'; const line=tpl.replaceAll('{STATE}',state).replaceAll('{TIMESTAMP}',nowStamp()).replace(/\s+/g,' ').trim(); $('#csvHeaderPreview').textContent='# '+line;});}
+$('#btnSaveSettings').addEventListener('click',async()=>{const s=await getSettings(); s.default_pdf_draft=$('#setDraft').checked; s.hide_scoring_key=$('#setHideKey').checked; s.csv_header_template=$('#setCsvTpl').value.trim()||'{STATE} generated {TIMESTAMP}'; await put('settings',s); updateCsvPreviewUI(); alert('Settings saved.');});
+$('#btnResetOutput').addEventListener('click',async()=>{const s=await getSettings(); s.default_pdf_draft=true; s.hide_scoring_key=false; s.csv_header_template='{STATE} generated {TIMESTAMP}'; await put('settings',s); $('#setDraft').checked=true; $('#setHideKey').checked=false; $('#setCsvTpl').value=s.csv_header_template; updateCsvPreviewUI();});
+$('#setCsvTpl').addEventListener('input',updateCsvPreviewUI); $('#setDraft').addEventListener('change',updateCsvPreviewUI);
+
+// bootstrap
+(async function init(){db=await idbOpen(); await put('settings',{...defaultSettings,...await getSettings()}); await refreshAthletes(); await refreshEventsFilters();
+  const s=await getSettings(); $('#setDraft').checked=s.default_pdf_draft; $('#setHideKey').checked=s.hide_scoring_key; $('#setCsvTpl').value=s.csv_header_template; updateCsvPreviewUI();})();
+</script>
+</body>
+</html>
